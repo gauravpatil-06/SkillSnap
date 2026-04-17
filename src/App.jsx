@@ -10,7 +10,8 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 
 import { Auth } from './pages/Auth.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
-import { AllTasks } from './pages/AllTasks.jsx';
+import { CalendarView } from './pages/CalendarView.jsx';
+import { EisenhowerMatrix } from './pages/EisenhowerMatrix.jsx';
 import { TodayTasks } from './pages/TodayTasks.jsx';
 import { History } from './pages/History.jsx';
 import { Settings } from './pages/Settings.jsx';
@@ -21,6 +22,7 @@ import { ActivityLog } from './pages/ActivityLog.jsx';
 import { About } from './pages/About.jsx';
 import { Feedback } from './pages/Feedback.jsx';
 import { LandingPage } from './pages/LandingPage.jsx';
+import { FocusMode } from './pages/FocusMode.jsx';
 
 function AppRoutes() {
   const { isSessionValid, isLoading } = useAuth();
@@ -39,7 +41,8 @@ function AppRoutes() {
       {/* Protected Routes wrapped in AppLayout */}
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/all-tasks" element={<AllTasks />} />
+        <Route path="/all-tasks" element={<CalendarView />} />
+        <Route path="/matrix" element={<EisenhowerMatrix />} />
         <Route path="/today" element={<TodayTasks />} />
         <Route path="/history" element={<History />} />
         <Route path="/settings" element={<Settings />} />
@@ -49,6 +52,7 @@ function AppRoutes() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/activity-log" element={<ActivityLog />} />
         <Route path="/feedback" element={<Feedback />} />
+        <Route path="/focus-mode" element={<FocusMode />} />
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

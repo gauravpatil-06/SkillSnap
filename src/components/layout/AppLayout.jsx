@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     LogOut, LayoutDashboard, Sun, Moon, BookOpen, Clock, FileText,
     CheckSquare, BarChart3, Menu, X, User, History,
-    MessageSquare, Settings, Activity
+    MessageSquare, Settings, Activity, CalendarDays, Grid
 } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { PageLoader } from '../ui/PageLoader';
@@ -23,9 +23,21 @@ const NAV_STRUCTURE = [
     },
     {
         type: 'link',
-        label: 'All Tasks',
+        label: 'Calendar',
         path: '/all-tasks',
-        icon: CheckSquare,
+        icon: CalendarDays,
+    },
+    {
+        type: 'link',
+        label: 'Priority Matrix',
+        path: '/matrix',
+        icon: Grid,
+    },
+    {
+        type: 'link',
+        label: 'Focus Mode',
+        path: '/focus-mode',
+        icon: Clock,
     },
     {
         type: 'link',

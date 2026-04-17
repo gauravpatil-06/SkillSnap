@@ -33,16 +33,18 @@ export const TaskProvider = ({ children }) => {
         }
     }, [isSessionValid, fetchTasks]);
 
-    const addTask = async (title, description = '', pdfUrl = '', fileName = '') => {
+    const addTask = async (taskData) => {
         if (!user) return;
-        const newTask = localDb.addTask(user._id, { title, description, pdfUrl, fileName });
+        const newTask = localDb.addTask(user._id, taskData);
         setTasks(prev => [newTask, ...prev]);
+        return newTask;
     };
 
     const updateTask = async (id, updates) => {
         if (!user) return;
         const updated = localDb.updateTask(user._id, id, updates);
         setTasks(prev => prev.map(t => t._id === id ? updated : t));
+        return updated;
     };
 
     const deleteTask = async (id) => {

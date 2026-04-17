@@ -180,7 +180,7 @@ export const getTasks = (userId) => lsGet(userKey(userId, 'tasks'), []);
 
 export const saveTasks = (userId, tasks) => lsSet(userKey(userId, 'tasks'), tasks);
 
-export const addTask = (userId, { title, description = '', pdfUrl = '', fileName = '' }) => {
+export const addTask = (userId, { title, description = '', pdfUrl = '', fileName = '', dueDate = '', startTime = '', endTime = '', quadrant = null }) => {
     const tasks = getTasks(userId);
     const newTask = {
         _id: generateId(),
@@ -188,6 +188,10 @@ export const addTask = (userId, { title, description = '', pdfUrl = '', fileName
         description,
         pdfUrl,
         fileName,
+        dueDate,
+        startTime,
+        endTime,
+        quadrant,
         status: 'pending',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

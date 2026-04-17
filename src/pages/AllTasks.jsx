@@ -69,6 +69,9 @@ export const AllTasks = () => {
     // Form States
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const [dueDate, setDueDate] = useState('');
+    const [startTime, setStartTime] = useState('09:00');
+    const [endTime, setEndTime] = useState('10:00');
     const [pdfFile, setPdfFile] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -93,42 +96,45 @@ export const AllTasks = () => {
         e.preventDefault();
         if (!title.trim()) return;
         setIsSubmitting(true);
-        let uploadedPdfUrl = '';
 
         try {
+            let uploadedPdfUrl = editingTask?.pdfUrl || '';
+            let fileName = editingTask?.fileName || '';
+
             if (pdfFile) {
-                // Check size for local storage compatibility (roughly 2MB)
                 if (pdfFile.size > 2 * 1024 * 1024) {
                     toast.error('File too large for offline storage (Max 2MB)');
                     setIsSubmitting(false);
                     return;
                 }
-
-                // Process file locally as Data URL for offline mode
                 uploadedPdfUrl = await new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = () => resolve(reader.result);
                     reader.onerror = (err) => reject(err);
                     reader.readAsDataURL(pdfFile);
                 });
+                fileName = pdfFile.name;
             }
 
+            const taskData = {
+                title,
+                description,
+                pdfUrl: uploadedPdfUrl,
+                fileName,
+                dueDate: dueDate || new Date().toISOString().split('T')[0],
+                startTime,
+                endTime: setendTime
+            };
+
             if (editingTask) {
-                await updateTask(editingTask._id, {
-                    title,
-                    description,
-                    ...(uploadedPdfUrl ? { pdfUrl: uploadedPdfUrl, fileName: pdfFile ? pdfFile.name : editingTask.fileName } : {})
-                });
+                await updateTask(editingTask._id, taskData);
                 toast.success('Task updated!');
             } else {
-                await addTask(title, description, uploadedPdfUrl, pdfFile ? pdfFile.name : '');
+                await addTask(taskData);
                 toast.success('Task added successfully!');
             }
 
-            setTitle('');
-            setDescription('');
-            setPdfFile(null);
-            setEditingTask(null);
+            resetForm();
             setIsAddModalOpen(false);
         } catch (error) {
             toast.error('Failed to process task.');
@@ -136,6 +142,27 @@ export const AllTasks = () => {
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const resetForm = () => {
+        setTitle('');
+        setDescription('');
+        setDueDate('');
+        setStartTime('09:00');
+        setEndTime('10:00');
+        setPdfFile(null);
+        setEditingTask(null);
+    };
+
+    const openEditModal = (task) => {
+        setEditingTask(task);
+        setTitle(task.title);
+        setDescription(task.description || '');
+        setDueDate(task.dueDate || '');
+        setStartTime(task.startTime || '09:00');
+        setEndTime(task.endTime || '10:00');
+        setPdfFile(null);
+        setIsAddModalOpen(true);
     };
 
     const openEditModal = (task) => {
@@ -281,7 +308,8 @@ export const AllTasks = () => {
 
         const groups = {};
         filtered.forEach(task => {
-            const dateStr = new Date(task.createdAt).toLocaleDateString('en-US', {
+            const dateToUse = task.dueDate || task.createdAt;
+            const dateStr = new Date(dateToUse).toLocaleDateString('en-US', {
                 month: 'short', day: 'numeric', year: 'numeric'
             });
             if (!groups[dateStr]) groups[dateStr] = [];
@@ -606,56 +634,70 @@ export const AllTasks = () => {
 
                             <form onSubmit={submitTask} className="space-y-4 z-10">
                                 <div className="space-y-1.5">
-                                    <label className="block text-[15px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Task Title <span className="text-red-500">*</span></label>
+                                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">
+                                        Task Title <span className="text-red-500">*</span>
+                                    </label>
                                     <input
-                                        type="text" required autoFocus
+                                        type="text" required
                                         value={title} onChange={(e) => setTitle(e.target.value)}
-                                        className="w-full px-3.5 py-2.5 text-[15px] bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all placeholder-gray-400 dark:placeholder-gray-500 font-medium"
-                                        placeholder="e.g., Core Java Notes (OOPs Concepts)"
+                                        className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all placeholder-gray-400 font-bold text-sm"
+                                        placeholder="e.g., Study Data Structures"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="block text-[15px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Description</label>
+                                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Description</label>
                                     <textarea
-                                        rows="2" value={description} onChange={(e) => setDescription(e.target.value)}
-                                        className="w-full px-3.5 py-2.5 text-[15px] bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none resize-none transition-all custom-scrollbar placeholder-gray-400 dark:placeholder-gray-500"
-                                        placeholder="Add notes, links, or instructions..."
+                                        rows="2"
+                                        value={description} onChange={(e) => setDescription(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none resize-none transition-all text-sm"
+                                        placeholder="Add notes..."
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="block text-[15px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Reference Material</label>
+                                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Scheduled Date</label>
+                                    <input
+                                        type="date"
+                                        value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all font-bold text-sm"
+                                    />
+                                </div>
 
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Start Time</label>
+                                        <input
+                                            type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+                                            className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all font-bold text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">End Time</label>
+                                        <input
+                                            type="time" value={endTime} onChange={(e) => setendTime(e.target.value)}
+                                            className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all font-bold text-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Reference Material</label>
                                     <div
                                         onClick={() => fileInputRef.current?.click()}
                                         className={`w-full py-4 border-2 border-dashed ${pdfFile ? 'border-[#47C4B7] bg-[#47C4B7]/5' : 'border-gray-300 dark:border-gray-700 hover:border-[#47C4B7]/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'} rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group`}
                                     >
-                                        <div className={`p-2.5 rounded-full ${pdfFile ? 'bg-[#47C4B7]/20' : 'bg-gray-100 dark:bg-gray-800 group-hover:bg-[#47C4B7]/10 transition-colors'}`}>
-                                            <Upload size={18} className={pdfFile ? 'text-[#47C4B7]' : 'text-gray-400 group-hover:text-[#47C4B7] transition-colors'} />
+                                        <div className={`p-2 rounded-full ${pdfFile ? 'bg-[#47C4B7]/20' : 'bg-gray-100 dark:bg-gray-800 group-hover:bg-[#47C4B7]/10 transition-colors'}`}>
+                                            <FileText size={18} className={pdfFile ? 'text-[#47C4B7]' : 'text-gray-400 group-hover:text-[#47C4B7] transition-colors'} />
                                         </div>
                                         <div className="text-center">
                                             {pdfFile ? (
-                                                <>
-                                                    <p className="text-[13px] font-bold text-[#47C4B7] flex items-center justify-center gap-1.5">
-                                                        <FileText size={14} /> {pdfFile.name}
-                                                    </p>
-                                                    <p className="text-[10px] font-medium text-[#47C4B7]/80 mt-1">Click to change document</p>
-                                                </>
+                                                <p className="text-[12px] font-bold text-[#47C4B7] truncate max-w-[200px] px-2">{pdfFile.name}</p>
                                             ) : (
-                                                <>
-                                                    <p className="text-[13px] font-semibold text-gray-700 dark:text-gray-300">
-                                                        Upload Document (PDF, Image)
-                                                    </p>
-                                                    <p className="text-[10px] font-medium text-gray-500 mt-0.5">
-                                                        Max file size: 10MB
-                                                    </p>
-                                                </>
+                                                <p className="text-[12px] font-medium text-gray-500">Upload PDF or Image (Max 2MB)</p>
                                             )}
                                         </div>
-                                        <input
-                                            type="file" ref={fileInputRef} onChange={handleFileChange} accept="application/pdf,image/png,image/jpeg,image/jpg,image/webp" className="hidden"
-                                        />
+                                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="application/pdf,image/*" className="hidden" />
                                     </div>
                                 </div>
 

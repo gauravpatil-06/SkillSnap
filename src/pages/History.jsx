@@ -132,7 +132,7 @@ export const History = () => {
                 const dEnd = new Date(d); dEnd.setHours(23, 59, 59, 999);
 
                 const dayTasks = tasks.filter(t => {
-                    const td = new Date(t.createdAt);
+                    const td = new Date(t.dueDate || t.createdAt);
                     return td >= dStart && td <= dEnd;
                 });
                 const dayActs = activities.filter(a => {

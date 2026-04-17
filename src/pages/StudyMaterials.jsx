@@ -312,9 +312,24 @@ export const StudyMaterials = () => {
     // PageLoader handled by AppLayout transition
 
     const FileIcon = ({ type, className }) => {
-        if (type === 'pdf') return <FileText className={`text-red-500 ${className}`} />;
-        if (type === 'image') return <ImageIcon className={`text-blue-500 ${className}`} />;
-        return <File className={`text-emerald-500 ${className}`} />;
+        if (type === 'pdf') return (
+            <div className={`flex flex-col items-center justify-center p-3 sm:p-4 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-100 dark:border-red-500/20 ${className}`}>
+                <FileText className="text-red-500 w-full h-full" strokeWidth={2.5} />
+                <span className="text-[8px] font-black text-red-500 mt-1 uppercase">PDF</span>
+            </div>
+        );
+        if (type === 'image') return (
+            <div className={`flex flex-col items-center justify-center p-3 sm:p-4 bg-blue-50 dark:bg-blue-500/10 rounded-xl border border-blue-100 dark:border-blue-500/20 ${className}`}>
+                <ImageIcon className="text-blue-500 w-full h-full" strokeWidth={2.5} />
+                <span className="text-[8px] font-black text-blue-500 mt-1 uppercase">IMG</span>
+            </div>
+        );
+        return (
+            <div className={`flex flex-col items-center justify-center p-3 sm:p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-100 dark:border-emerald-500/20 ${className}`}>
+                <File className="text-emerald-500 w-full h-full" strokeWidth={2.5} />
+                <span className="text-[8px] font-black text-emerald-500 mt-1 uppercase">DOC</span>
+            </div>
+        );
     };
 
     return (
@@ -483,7 +498,11 @@ export const StudyMaterials = () => {
                                             onClick={() => setPreviewFile(m)}
                                         >
                                             {m.fileType === 'image' ? (
-                                                <img src={`${BASE_URL}${m.fileUrl}`} alt={m.title} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                                                <img 
+                                                    src={m.fileUrl?.startsWith('data:') ? m.fileUrl : `${BASE_URL}${m.fileUrl}`} 
+                                                    alt={m.title} 
+                                                    className="w-full h-full object-cover transition-transform group-hover:scale-110" 
+                                                />
                                             ) : (
                                                 <FileIcon type={m.fileType} className={`${viewMode === 'grid' ? 'w-10 h-10 sm:w-14 sm:h-14' : 'w-10 h-10'} opacity-40 group-hover:opacity-100 transition-opacity`} />
                                             )}
@@ -677,9 +696,16 @@ export const StudyMaterials = () => {
                         </div>
                         <div className="w-full h-full max-w-7xl max-h-[90vh] flex items-center justify-center overflow-hidden rounded-[3rem] bg-black/20 border border-white/5 shadow-2xl">
                             {previewFile.fileType === 'image' ? (
-                                <img src={`${BASE_URL}${previewFile.fileUrl}`} alt={previewFile.title} className="max-w-full max-h-full object-contain" />
+                                <img 
+                                    src={previewFile.fileUrl?.startsWith('data:') ? previewFile.fileUrl : `${BASE_URL}${previewFile.fileUrl}`} 
+                                    alt={previewFile.title} 
+                                    className="max-w-full max-h-full object-contain" 
+                                />
                             ) : previewFile.fileType === 'pdf' ? (
-                                <iframe src={`${BASE_URL}${previewFile.fileUrl}`} className="w-full h-full border-none" />
+                                <iframe 
+                                    src={previewFile.fileUrl?.startsWith('data:') ? previewFile.fileUrl : `${BASE_URL}${previewFile.fileUrl}`} 
+                                    className="w-full h-full border-none" 
+                                />
                             ) : (
                                 <div className="text-center space-y-8 p-10">
                                     <FileIcon type="doc" className="w-32 h-32 mx-auto" />

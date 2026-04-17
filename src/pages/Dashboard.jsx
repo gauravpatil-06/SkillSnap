@@ -16,6 +16,7 @@ import * as localDb from '../services/localDb';
 import toast from 'react-hot-toast';
 import { PageLoader } from '../components/ui/PageLoader';
 import { WelcomeModal } from '../components/ui/WelcomeModal';
+import { HoverCard } from '../components/ui/HoverCard';
 
 
 
@@ -46,41 +47,6 @@ const lightTheme = createTheme({
 
 
 
-/* ─────────────────────────────────────────────────────────────────
-   Inline styles for the zoom + border hover effect on cards
-───────────────────────────────────────────────────────────────── */
-const cardBaseStyle = {
-    transition: 'transform 0.28s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.28s ease, border-color 0.28s ease',
-};
-
-const cardHoverStyle = {
-    transform: 'scale(1.05) translateY(-6px)',
-    boxShadow: '0 20px 40px -8px rgba(71,196,183,0.22), 0 8px 16px -4px rgba(71,196,183,0.12)',
-    borderColor: 'rgba(71,196,183,0.6)',
-};
-
-const HoverCard = ({ children, className, style, delay, rKey, extraHover = {} }) => {
-    const [hovered, setHovered] = useState(false);
-
-    return (
-        <motion.div
-            key={rKey}
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.6, delay, ease: [0.23, 1, 0.32, 1] }}
-            className={className}
-            style={{
-                ...cardBaseStyle,
-                ...(hovered ? { ...cardHoverStyle, ...extraHover } : {}),
-                ...style,
-            }}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-        >
-            {children}
-        </motion.div>
-    );
-};
 
 const StatCard = ({ label, value, icon: Icon, colorClass, delay, rKey, borderColorClass, path }) => {
     const content = (
@@ -140,6 +106,9 @@ export const Dashboard = () => {
     // Form States
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const [dueDate, setDueDate] = useState('');
+    const [startTime, setStartTime] = useState('09:00');
+    const [endTime, setEndTime] = useState('10:00');
     const [pdfFile, setPdfFile] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -342,10 +311,6 @@ export const Dashboard = () => {
         return { total, completed, completionRate };
     }, [tasks]);
 
-    const displayedTasks = useMemo(() => {
-        const todayStr = new Date().toDateString();
-        return tasks.filter(t => new Date(t.createdAt).toDateString() === todayStr);
-    }, [tasks]);
 
     // Timer Logic
     useEffect(() => {
@@ -540,6 +505,130 @@ export const Dashboard = () => {
         });
     }, [tasks]);
 
+    const displayedTasks = useMemo(() => {
+        const todayStr = new Date().toDateString();
+        return tasks.filter(t => {
+            const created = new Date(t.createdAt).toDateString();
+            const due = t.dueDate ? new Date(t.dueDate).toDateString() : null;
+            return created === todayStr || due === todayStr;
+        });
+    }, [tasks]);
+
+    const handleDownloadFile = async (fileUrl, originalName) => {
+        try {
+            const loadingToast = toast.loading('Downloading file...');
+            let downloadUrl = fileUrl;
+            if (fileUrl.startsWith('/uploads')) {
+                const response = await fetch(`${BASE_URL}${fileUrl}`);
+                if (!response.ok) throw new Error('File not found on server');
+                const blob = await response.blob();
+                downloadUrl = window.URL.createObjectURL(blob);
+            }
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            const safeOriginalName = originalName || 'document.pdf';
+            const cleanFileName = decodeURIComponent(safeOriginalName).replace(/-\d{13}-\d+(?=\.[^.]+$)/, '').replace(/-/g, ' ');
+            link.download = cleanFileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            if (fileUrl.startsWith('/uploads')) window.URL.revokeObjectURL(downloadUrl);
+            toast.success('Download complete!', { id: loadingToast });
+        } catch (error) {
+            console.error("Download failed:", error);
+            toast.error("Failed to download file");
+        }
+    };
+
+    const handleOpenFile = (fileUrl) => {
+        if (!fileUrl) return;
+        if (fileUrl.startsWith('data:')) {
+            try {
+                const parts = fileUrl.split(',');
+                const byteString = atob(parts[1]);
+                const mimeString = parts[0].split(':')[1].split(';')[0];
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+                const blob = new Blob([ab], { type: mimeString });
+                const blobUrl = URL.createObjectURL(blob);
+                window.open(blobUrl, '_blank');
+            } catch (err) {
+                console.error("Failed to open Base64 file:", err);
+                toast.error("Could not open this file.");
+            }
+        } else {
+            window.open(`${BASE_URL}${fileUrl}`, '_blank');
+        }
+    };
+
+    const submitTask = async (e) => {
+        e.preventDefault();
+        if (!title.trim()) return;
+        setIsSubmitting(true);
+
+        try {
+            let uploadedPdfUrl = editingTask?.pdfUrl || '';
+            let fileName = editingTask?.fileName || '';
+
+            if (pdfFile) {
+                uploadedPdfUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = (err) => reject(err);
+                    reader.readAsDataURL(pdfFile);
+                });
+                fileName = pdfFile.name;
+            }
+
+            const taskData = {
+                title,
+                description,
+                pdfUrl: uploadedPdfUrl,
+                fileName,
+                dueDate: dueDate || new Date().toISOString().split('T')[0],
+                startTime,
+                endTime
+            };
+
+            if (editingTask) {
+                await updateTask(editingTask._id, taskData);
+                toast.success('Task updated! ✨');
+            } else {
+                await addTask(taskData);
+                toast.success('Task added! 🚀');
+            }
+
+            setIsAddModalOpen(false);
+            resetTaskForm();
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to save task');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const resetTaskForm = () => {
+        setTitle('');
+        setDescription('');
+        setDueDate('');
+        setStartTime('09:00');
+        setEndTime('10:00');
+        setPdfFile(null);
+        setEditingTask(null);
+    };
+
+    const openEditTaskModal = (task) => {
+        setEditingTask(task);
+        setTitle(task.title);
+        setDescription(task.description || '');
+        setDueDate(task.dueDate || '');
+        setStartTime(task.startTime || '09:00');
+        setEndTime(task.endTime || '10:00');
+        setIsAddModalOpen(true);
+    };
+
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -555,32 +644,6 @@ export const Dashboard = () => {
         }
     };
 
-    const submitTask = async (e) => {
-        e.preventDefault();
-        if (!title.trim()) return;
-        setIsSubmitting(true);
-        try {
-            // File upload disabled offline — pdfUrl not supported in offline mode
-            if (editingTask) {
-                await updateTask(editingTask._id, { title, description });
-                toast.success('Task updated!');
-            } else {
-                await addTask(title, description, '');
-                toast.success('Task added successfully!');
-            }
-            setTitle('');
-            setDescription('');
-            setPdfFile(null);
-            setEditingTask(null);
-            setIsAddModalOpen(false);
-        } catch (error) {
-            toast.error('Failed to process task.');
-            console.error(error);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     const openEditModal = (task) => {
         setEditingTask(task);
         setTitle(task.title);
@@ -589,34 +652,6 @@ export const Dashboard = () => {
         setIsAddModalOpen(true);
     };
 
-    const handleDownloadFile = async (fileUrl, originalName) => {
-        try {
-            const loadingToast = toast.loading('Downloading file...');
-            const url = `${BASE_URL}${fileUrl}`; // Point directly to the backend
-            const response = await fetch(url);
-
-            if (!response.ok) throw new Error('File not found on server');
-
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-
-            const safeOriginalName = originalName || fileUrl.split('/').pop() || 'document.pdf';
-            const cleanFileName = decodeURIComponent(safeOriginalName).replace(/-\d{13}-\d+(?=\.[^.]+$)/, '').replace(/-/g, ' ');
-            link.download = cleanFileName;
-
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(downloadUrl);
-
-            toast.success('Download complete!', { id: loadingToast });
-        } catch (error) {
-            console.error("Download failed:", error);
-            toast.error("Failed to download file");
-        }
-    };
 
     const handleRefresh = () => {
         setIsRefreshing(true);
@@ -1133,10 +1168,7 @@ export const Dashboard = () => {
                     {/* Add Task Button for mobile shrinking */}
                     <button
                         onClick={() => {
-                            setEditingTask(null);
-                            setTitle('');
-                            setDescription('');
-                            setPdfFile(null);
+                            resetTaskForm();
                             setIsAddModalOpen(true);
                         }}
                         className="shrink-0 flex items-center justify-center gap-1.5 p-2 sm:px-4 sm:py-1.5 bg-[#47C4B7] hover:bg-[#3bb5a8] text-white font-extrabold text-[13px] rounded-full sm:rounded-xl shadow-xl transition-all group"
@@ -1255,16 +1287,19 @@ export const Dashboard = () => {
                                                     {/* Action Buttons — bottom on mobile, right on desktop */}
                                                     <div className={`${!task.pdfUrl ? 'hidden sm:flex' : 'flex'} items-center gap-2 justify-end sm:shrink-0`}>
                                                         {task.pdfUrl && (
-                                                            <div className="flex items-center gap-2.5 text-red-600 dark:text-red-400 text-[10px] sm:text-[13px] font-black relative z-10">
-                                                                <a
-                                                                    href={`${BASE_URL}${task.pdfUrl}`}
-                                                                    target="_blank" rel="noreferrer"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className="flex items-center gap-1 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                                                            <div className="flex items-center gap-2.5 text-[10px] sm:text-[13px] font-black relative z-10">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        handleOpenFile(task.pdfUrl);
+                                                                    }}
+                                                                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
                                                                     title="Open File"
                                                                 >
-                                                                    <FileText size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" /> Open
-                                                                </a>
+                                                                    <FileText size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" strokeWidth={2.5} /> Open
+                                                                </button>
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => {
@@ -1272,10 +1307,10 @@ export const Dashboard = () => {
                                                                         e.stopPropagation();
                                                                         handleDownloadFile(task.pdfUrl, task.fileName);
                                                                     }}
-                                                                    className="flex items-center gap-1 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                                                                    className="flex items-center gap-1 text-[#47C4B7] hover:text-[#3db3a6] transition-colors"
                                                                     title="Download File"
                                                                 >
-                                                                    <Download size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" /> Download
+                                                                    <Download size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" strokeWidth={2.5} /> Download
                                                                 </button>
                                                             </div>
                                                         )}
@@ -1424,56 +1459,70 @@ export const Dashboard = () => {
 
                             <form onSubmit={submitTask} className="space-y-4 z-10">
                                 <div className="space-y-1.5">
-                                    <label className="block text-[15px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Task Title <span className="text-red-500">*</span></label>
+                                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">
+                                        Task Title <span className="text-red-500">*</span>
+                                    </label>
                                     <input
-                                        type="text" required autoFocus
+                                        type="text" required
                                         value={title} onChange={(e) => setTitle(e.target.value)}
-                                        className="w-full px-3.5 py-2.5 text-[15px] bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all placeholder-gray-400 dark:placeholder-gray-500 font-medium"
-                                        placeholder="e.g., Core Java Notes (OOPs Concepts)"
+                                        className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all placeholder-gray-400 font-bold text-sm"
+                                        placeholder="e.g., Study Data Structures"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="block text-[15px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Description</label>
+                                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Description</label>
                                     <textarea
-                                        rows="2" value={description} onChange={(e) => setDescription(e.target.value)}
-                                        className="w-full px-3.5 py-2.5 text-[15px] bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none resize-none transition-all custom-scrollbar placeholder-gray-400 dark:placeholder-gray-500"
-                                        placeholder="Add notes, links, or instructions..."
+                                        rows="2"
+                                        value={description} onChange={(e) => setDescription(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none resize-none transition-all text-sm"
+                                        placeholder="Add notes..."
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="block text-[15px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Reference Material</label>
+                                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Scheduled Date</label>
+                                    <input
+                                        type="date"
+                                        value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all font-bold text-sm"
+                                    />
+                                </div>
 
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Start Time</label>
+                                        <input
+                                            type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+                                            className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all font-bold text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">End Time</label>
+                                        <input
+                                            type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)}
+                                            className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-1 focus:ring-[#47C4B7]/30 focus:border-[#47C4B7] text-gray-900 dark:text-white outline-none transition-all font-bold text-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 tracking-tight">Reference Material</label>
                                     <div
                                         onClick={() => fileInputRef.current?.click()}
                                         className={`w-full py-4 border-2 border-dashed ${pdfFile ? 'border-[#47C4B7] bg-[#47C4B7]/5' : 'border-gray-300 dark:border-gray-700 hover:border-[#47C4B7]/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'} rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-all group`}
                                     >
-                                        <div className={`p-2.5 rounded-full ${pdfFile ? 'bg-[#47C4B7]/20' : 'bg-gray-100 dark:bg-gray-800 group-hover:bg-[#47C4B7]/10 transition-colors'}`}>
-                                            <Upload size={18} className={pdfFile ? 'text-[#47C4B7]' : 'text-gray-400 group-hover:text-[#47C4B7] transition-colors'} />
+                                        <div className={`p-2 rounded-full ${pdfFile ? 'bg-[#47C4B7]/20' : 'bg-gray-100 dark:bg-gray-800 group-hover:bg-[#47C4B7]/10 transition-colors'}`}>
+                                            <FileText size={18} className={pdfFile ? 'text-[#47C4B7]' : 'text-gray-400 group-hover:text-[#47C4B7] transition-colors'} />
                                         </div>
                                         <div className="text-center">
                                             {pdfFile ? (
-                                                <>
-                                                    <p className="text-[13px] font-bold text-[#47C4B7] flex items-center justify-center gap-1.5">
-                                                        <FileText size={14} /> {pdfFile.name}
-                                                    </p>
-                                                    <p className="text-[10px] font-medium text-[#47C4B7]/80 mt-1">Click to change document</p>
-                                                </>
+                                                <p className="text-[12px] font-bold text-[#47C4B7] truncate max-w-[200px] px-2">{pdfFile.name}</p>
                                             ) : (
-                                                <>
-                                                    <p className="text-[13px] font-semibold text-gray-700 dark:text-gray-300">
-                                                        Upload Document (PDF, Image)
-                                                    </p>
-                                                    <p className="text-[10px] font-medium text-gray-500 mt-0.5">
-                                                        Max file size: 10MB
-                                                    </p>
-                                                </>
+                                                <p className="text-[12px] font-medium text-gray-500">Upload PDF or Image (Max 2MB)</p>
                                             )}
                                         </div>
-                                        <input
-                                            type="file" ref={fileInputRef} onChange={handleFileChange} accept="application/pdf,image/png,image/jpeg,image/jpg,image/webp" className="hidden"
-                                        />
+                                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="application/pdf,image/*" className="hidden" />
                                     </div>
                                 </div>
 
