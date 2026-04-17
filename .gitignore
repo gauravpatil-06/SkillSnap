@@ -1,0 +1,54 @@
+# Node modules
+node_modules/
+server/node_modules/
+
+# Specifically ignored project files
+*.json
+server/*.json
+migrate_mongodb_to_local.js
+
+# Environment files
+.env
+.env.local
+.env.*.local
+server/.env
+server/.env.local
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+*.local
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Ignore user-uploaded files, but preserve placeholder directory structure
+server/uploads/*
+!server/uploads/avatars/.gitkeep
+!server/uploads/notes/.gitkeep
+!server/uploads/materials/.gitkeep
+
+# Optional: TypeScript / Vite specific
+*.tsbuildinfo
+node_modules
+.eslintcache
