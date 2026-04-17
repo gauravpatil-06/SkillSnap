@@ -118,12 +118,21 @@ export const StudyMaterials = () => {
 
         try {
             if (file) {
-                const formData = new FormData();
-                formData.append('file', file);
-                const { data } = await api.post('/upload', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
+                // Check size for local storage compatibility (roughly 2MB)
+                if (file.size > 2 * 1024 * 1024) {
+                    toast.error('File too large for offline storage (Max 2MB)');
+                    setIsSubmitting(false);
+                    return;
+                }
+
+                // Process file locally as Data URL for offline mode
+                uploadedFileUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = (err) => reject(err);
+                    reader.readAsDataURL(file);
                 });
-                uploadedFileUrl = data.fileUrl || '';
+                
                 detectedFileType = getFileType(file.type);
             }
 
@@ -189,22 +198,60 @@ export const StudyMaterials = () => {
     const handleDownload = async (fileUrl, originalName) => {
         try {
             const loadingToast = toast.loading('Downloading...');
-            const response = await fetch(`${BASE_URL}${fileUrl}`);
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
+            
+            let downloadUrl = fileUrl;
+            
+            // If it's a server path, handle via fetch
+            if (fileUrl.startsWith('/uploads')) {
+                const response = await fetch(`${BASE_URL}${fileUrl}`);
+                if (!response.ok) throw new Error('File not found on server');
+                const blob = await response.blob();
+                downloadUrl = window.URL.createObjectURL(blob);
+            }
+
             const link = document.createElement('a');
             link.href = downloadUrl;
             
-            const safeOriginalName = originalName || fileUrl.split('/').pop() || 'document.pdf';
+            const safeOriginalName = originalName || 'document.pdf';
             const cleanFileName = decodeURIComponent(safeOriginalName).replace(/-\d{13}-\d+(?=\.[^.]+$)/, '');
             link.download = cleanFileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            window.URL.revokeObjectURL(downloadUrl);
+            
+            if (fileUrl.startsWith('/uploads')) {
+                window.URL.revokeObjectURL(downloadUrl);
+            }
+            
             toast.success('Download complete', { id: loadingToast });
         } catch (error) {
+            console.error("Download failed:", error);
             toast.error("Download failed");
+        }
+    };
+
+    const handleOpenFile = (fileUrl) => {
+        if (!fileUrl) return;
+
+        if (fileUrl.startsWith('data:')) {
+            try {
+                const parts = fileUrl.split(',');
+                const byteString = atob(parts[1]);
+                const mimeString = parts[0].split(':')[1].split(';')[0];
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) {
+                    ia[i] = byteString.charCodeAt(i);
+                }
+                const blob = new Blob([ab], { type: mimeString });
+                const blobUrl = URL.createObjectURL(blob);
+                window.open(blobUrl, '_blank');
+            } catch (err) {
+                console.error("Failed to open Base64 material:", err);
+                toast.error("Could not open this file.");
+            }
+        } else {
+            window.open(`${BASE_URL}${fileUrl}`, '_blank');
         }
     };
 
@@ -475,14 +522,18 @@ export const StudyMaterials = () => {
 
                                             <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 pt-1.5 sm:pt-2 mt-auto border-t border-gray-100 dark:border-gray-800/60">
                                                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-red-600 dark:text-red-400 text-[10px] sm:text-[11px] font-black shrink-0 relative z-10">
-                                                    <a
-                                                        href={`${BASE_URL}${m.fileUrl}`} target="_blank" rel="noreferrer"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className="flex items-center gap-1 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { 
+                                                            e.preventDefault(); 
+                                                            e.stopPropagation(); 
+                                                            handleOpenFile(m.fileUrl); 
+                                                        }}
+                                                        className="flex items-center gap-1 hover:text-red-800 dark:hover:text-red-300 transition-colors bg-transparent border-none p-0 cursor-pointer"
                                                         title="Open File"
                                                     >
                                                         <FileText size={12} className="sm:w-[14px] sm:h-[14px]" /> <span className={viewMode === 'grid' ? 'hidden xs:inline sm:inline' : 'inline'}>Open</span>
-                                                    </a>
+                                                    </button>
                                                     <button
                                                         type="button"
                                                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDownload(m.fileUrl, m.fileName); }}

@@ -26,11 +26,11 @@ import quoteRoutes from './routes/quotes.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Middleware
 app.use(cors({
-    origin: process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : 'http://localhost:5173',
+    origin: process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
     credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -43,11 +43,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 }));
 
 // Database Connection
-mongoose.connect(process.env.MONGO_URI)
-    .then(async () => {
-        console.log('✅ Connected to MongoDB');
-    })
-    .catch((err) => console.error('❌ MongoDB connection error:', err));
+if (process.env.MONGO_URI) {
+    mongoose.connect(process.env.MONGO_URI)
+        .then(async () => {
+            console.log('✅ Connected to MongoDB');
+        })
+        .catch((err) => console.error('❌ MongoDB connection error:', err));
+} else {
+    console.log('⚠️ No MONGO_URI found. Server running in partially limited mode (Uploads/Static still work).');
+}
 
 // API Routes
 app.use('/api/auth', authRoutes);

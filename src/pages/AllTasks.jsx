@@ -97,12 +97,20 @@ export const AllTasks = () => {
 
         try {
             if (pdfFile) {
-                const formData = new FormData();
-                formData.append('file', pdfFile);
-                const { data } = await api.post('/upload', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
+                // Check size for local storage compatibility (roughly 2MB)
+                if (pdfFile.size > 2 * 1024 * 1024) {
+                    toast.error('File too large for offline storage (Max 2MB)');
+                    setIsSubmitting(false);
+                    return;
+                }
+
+                // Process file locally as Data URL for offline mode
+                uploadedPdfUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = (err) => reject(err);
+                    reader.readAsDataURL(pdfFile);
                 });
-                uploadedPdfUrl = data.fileUrl || '';
             }
 
             if (editingTask) {
@@ -175,25 +183,64 @@ export const AllTasks = () => {
     const handleDownloadFile = async (fileUrl, originalName) => {
         try {
             const loadingToast = toast.loading('Downloading file...');
-            const url = `${BASE_URL}${fileUrl}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('File not found on server');
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
+            
+            let downloadUrl = fileUrl;
+            
+            // If it's a server path, handle via fetch to avoid CORS/extension issues
+            if (fileUrl.startsWith('/uploads')) {
+                const response = await fetch(`${BASE_URL}${fileUrl}`);
+                if (!response.ok) throw new Error('File not found on server');
+                const blob = await response.blob();
+                downloadUrl = window.URL.createObjectURL(blob);
+            }
+
             const link = document.createElement('a');
             link.href = downloadUrl;
             
-            const safeOriginalName = originalName || fileUrl.split('/').pop() || 'document.pdf';
+            const safeOriginalName = originalName || 'document.pdf';
             const cleanFileName = decodeURIComponent(safeOriginalName).replace(/-\d{13}-\d+(?=\.[^.]+$)/, '').replace(/-/g, ' ');
+            
             link.download = cleanFileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            window.URL.revokeObjectURL(downloadUrl);
+            
+            if (fileUrl.startsWith('/uploads')) {
+                window.URL.revokeObjectURL(downloadUrl);
+            }
+            
             toast.success('Download complete!', { id: loadingToast });
         } catch (error) {
             console.error("Download failed:", error);
             toast.error("Failed to download file");
+        }
+    };
+
+    const handleOpenFile = (fileUrl) => {
+        if (!fileUrl) return;
+
+        if (fileUrl.startsWith('data:')) {
+            // For Base64 Data URLs, we convert to Blob and create an Object URL 
+            // to bypass browser security blocks on direct Data URL navigation.
+            try {
+                const parts = fileUrl.split(',');
+                const byteString = atob(parts[1]);
+                const mimeString = parts[0].split(':')[1].split(';')[0];
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) {
+                    ia[i] = byteString.charCodeAt(i);
+                }
+                const blob = new Blob([ab], { type: mimeString });
+                const blobUrl = URL.createObjectURL(blob);
+                window.open(blobUrl, '_blank');
+            } catch (err) {
+                console.error("Failed to open Base64 file:", err);
+                toast.error("Could not open this file version.");
+            }
+        } else {
+            // Normal server-side URL
+            window.open(`${BASE_URL}${fileUrl}`, '_blank');
         }
     };
 
@@ -477,15 +524,18 @@ export const AllTasks = () => {
                                                     <div className={`${!task.pdfUrl ? 'hidden sm:flex' : 'flex'} items-center gap-2 justify-end sm:shrink-0`}>
                                                         {task.pdfUrl && (
                                                             <div className="flex items-center gap-2.5 text-red-600 dark:text-red-400 text-[10px] sm:text-[13px] font-black relative z-10">
-                                                                <a
-                                                                    href={`${BASE_URL}${task.pdfUrl}`}
-                                                                    target="_blank" rel="noreferrer"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className="flex items-center gap-1 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { 
+                                                                        e.preventDefault(); 
+                                                                        e.stopPropagation(); 
+                                                                        handleOpenFile(task.pdfUrl); 
+                                                                    }}
+                                                                    className="flex items-center gap-1 hover:text-red-800 dark:hover:text-red-300 transition-colors bg-transparent border-none p-0 cursor-pointer"
                                                                     title="Open File"
                                                                 >
                                                                      <FileText size={12} className="sm:w-[14px] sm:h-[14px] shrink-0" /> Open
-                                                                </a>
+                                                                </button>
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => {
